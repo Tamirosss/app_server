@@ -8,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCors();
 builder.Services.AddDbContext<WorkoutDbContext>(options =>
     options.UseSqlite("Data Source=workout.db"));
+builder.WebHost.UseUrls("http://0.0.0.0:8080");
 
 var app = builder.Build();
 
@@ -167,7 +168,7 @@ DO NOT RETURN ANY OTHER TEXT EXCEPT THE JSON ARRAY.";
     try
     {
         Console.WriteLine("[WORKOUTS] Sending request to Gemini...");
-        
+
         var response = await client.Models.GenerateContentAsync(
             model: "gemini-2.5-flash",
             contents: contents
@@ -205,7 +206,7 @@ DO NOT RETURN ANY OTHER TEXT EXCEPT THE JSON ARRAY.";
                 if (workoutsData[i].excercises != null)
                 {
                     Console.WriteLine($"[WORKOUTS] Saving {workoutsData[i].excercises.Count} exercises for workout {i + 1}");
-                    
+
                     for (int j = 0; j < workoutsData[i].excercises.Count; j++)
                     {
                         var ex = workoutsData[i].excercises[j];
@@ -245,7 +246,7 @@ DO NOT RETURN ANY OTHER TEXT EXCEPT THE JSON ARRAY.";
 app.MapGet("/replace-exercise", async (string exerciseName) =>
 {
     Console.WriteLine($"[REPLACE] Request to replace exercise: {exerciseName}");
-    
+
     var client = new Client(apiKey: apiKey);
 
     var contents = $@"Find an alternative exercise for: {exerciseName}
@@ -273,9 +274,9 @@ DO NOT return any text except the JSON object.";
 
         var resultText = response.Candidates[0].Content.Parts[0].Text;
         var cleanJson = CleanJsonString(resultText);
-        
+
         Console.WriteLine($"[REPLACE] Alternative exercise found: {cleanJson}");
-        
+
         return Results.Content(cleanJson, "application/json");
     }
     catch (Exception ex)
