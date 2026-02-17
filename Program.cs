@@ -17,6 +17,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<WorkoutDbContext>();
     db.Database.EnsureCreated();
 }
+app.MapGet("/", () => "API is running");
 
 app.UseCors(policy =>
 {
