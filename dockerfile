@@ -4,9 +4,8 @@ EXPOSE 8080
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY ["JsonDemo.csproj", "./"]
-RUN dotnet restore
 COPY . .
+RUN dotnet restore
 RUN dotnet build -c Release -o /app/build
 
 FROM build AS publish
