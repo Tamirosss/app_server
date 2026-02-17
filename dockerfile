@@ -1,46 +1,42 @@
-# ============================================================
-# שלב 1: Build - קומפילציה של הפרויקט
-# משתמשים ב-SDK image שמכיל את כלי הבנייה
-# ============================================================
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+# =========================
+# Stage 1 - Build
+# =========================
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 
-# תיקיית העבודה בתוך הקונטיינר
-WORKDIR /app
+WORKDIR /src
 
-# העתקת קבצי הפרויקט תחילה (לניצול cache של Docker)
+# Copy csproj and restore first (better cache)
 COPY *.csproj ./
-
-# שחזור חבילות NuGet
 RUN dotnet restore
 
-# העתקת שאר הקוד
+# Copy everything else
 COPY . ./
 
-# בנייה ופרסום במצב Release
-RUN dotnet publish -c Release -o /app/publish
+# Publish
+RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
-# ============================================================
-# שלב 2: Runtime - הרצת השרת
-# משתמשים ב-runtime image קטן יותר (ללא כלי בנייה)
-# ============================================================
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+
+# =========================
+# Stage 2 - Runtime
+# =========================
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 
 WORKDIR /app
 
-# העתקת הפרויקט המקומפל משלב הבנייה
+# Copy published files
 COPY --from=build /app/publish .
 
-# יצירת תיקייה למסד הנתונים SQLite
+# Create folder for SQLite
 RUN mkdir -p /app/data
 
-# הגדרת משתנה סביבה - SQLite ישמר בתיקייה נפרדת
+# Important for Coolify – bind to dynamic PORT
+ENV ASPNETCORE_URLS=http://0.0.0.0:${PORT}
+
+# SQLite connection string
 ENV ConnectionStrings__DefaultConnection="Data Source=/app/data/workout.db"
 
-# פורט שהשרת מאזין עליו
+# Do NOT hardcode port
 EXPOSE 8080
 
-# הגדרת ASP.NET לעבוד על פורט 8080
-ENV ASPNETCORE_URLS=http://+:8080
-
-# פקודת הרצה
+# Replace with your actual dll name if different
 ENTRYPOINT ["dotnet", "WApp.dll"]
