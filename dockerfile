@@ -39,4 +39,4 @@ ENV ConnectionStrings__DefaultConnection="Data Source=/app/data/workout.db"
 EXPOSE 8080
 
 # Replace with your actual dll name if different
-ENTRYPOINT ["dotnet", "WApp.dll"]
+ENTRYPOINT ["dotnet", "JsonDemo.dll"]
