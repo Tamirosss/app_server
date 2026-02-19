@@ -383,7 +383,7 @@ public class Exercise
 
     public int Sets { get; set; }
 
-    public string Reps { get; set; }
+    public int Reps { get; set; }
 
     public int RestTime { get; set; }
 
