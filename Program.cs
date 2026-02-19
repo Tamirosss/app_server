@@ -26,7 +26,7 @@ app.UseCors(policy =>
           .AllowAnyHeader();
 });
 
-var apiKey = "AIzaSyB7vr2gLX95685lHa64jbXbOT91eIuPZEM";
+var apiKey = "AIzaSyC8svFb2l7jAUII8VdIn8KjJ2d390aIH9E";
 
 app.MapPost("/register", async (UserCredentials credentials, WorkoutDbContext db) =>
 {
