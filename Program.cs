@@ -26,7 +26,7 @@ app.UseCors(policy =>
           .AllowAnyHeader();
 });
 
-var apiKey = "AIzaSyB7vr2gLX95685lHa64jbXbOT91eIuPZEM";
+var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
 
 app.MapPost("/register", async (UserCredentials credentials, WorkoutDbContext db) =>
 {
