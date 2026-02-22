@@ -5,20 +5,53 @@ using System.ComponentModel.DataAnnotations;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// הוספת שירותים - CORS ומסד נתונים
 builder.Services.AddCors();
-builder.Services.AddDbContext<WorkoutDbContext>(options =>
-    options.UseSqlite("Data Source=workout.db"));
-builder.WebHost.UseUrls("http://0.0.0.0:8080");
+
+// ============================================================
+// קריאת מחרוזת החיבור למסד הנתונים
+// אם יש DATABASE_URL (Coolify) - נשתמש בו
+// אחרת נשתמש ב-SQLite לפיתוח מקומי
+// ============================================================
+var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+
+if (!string.IsNullOrEmpty(databaseUrl))
+{
+    // פרודקשן - PostgreSQL
+    Console.WriteLine("[DB] Using PostgreSQL from DATABASE_URL");
+    builder.Services.AddDbContext<WorkoutDbContext>(options =>
+        options.UseNpgsql(databaseUrl));
+}
+else
+{
+    // פיתוח - SQLite מקומי
+    Console.WriteLine("[DB] Using SQLite for local development");
+    builder.Services.AddDbContext<WorkoutDbContext>(options =>
+        options.UseSqlite("Data Source=workout.db"));
+}
 
 var app = builder.Build();
 
+// יצירת מסד הנתונים והטבלאות אוטומטית אם לא קיימים
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<WorkoutDbContext>();
-    db.Database.EnsureCreated();
+    
+    try
+    {
+        Console.WriteLine("[DB] Running migrations...");
+        db.Database.Migrate();
+        Console.WriteLine("[DB] Database ready!");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[DB] Migration error: {ex.Message}");
+        // אם Migrate נכשל, ננסה EnsureCreated
+        db.Database.EnsureCreated();
+    }
 }
-app.MapGet("/", () => "API is running");
 
+// הגדרת CORS - מאפשר בקשות מכל מקור
 app.UseCors(policy =>
 {
     policy.AllowAnyOrigin()
@@ -26,31 +59,35 @@ app.UseCors(policy =>
           .AllowAnyHeader();
 });
 
-var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+// מפתח ה-API של Gemini AI
+var apiKey = "GEMINI_API_KEY";
 
+// ============================================================
+// POST /register
+// רושם משתמש חדש במסד הנתונים
+// מקבל: username, password
+// מחזיר: הצלחה/כישלון + נתוני המשתמש החדש
+// ============================================================
 app.MapPost("/register", async (UserCredentials credentials, WorkoutDbContext db) =>
 {
+    // ולידציה - בדיקת שדות ריקים
     if (string.IsNullOrWhiteSpace(credentials.username) || string.IsNullOrWhiteSpace(credentials.password))
-    {
         return Results.Json(new { success = false, message = "Username and password are required" });
-    }
 
+    // ולידציה - אורך מינימלי לשם משתמש
     if (credentials.username.Length < 3)
-    {
         return Results.Json(new { success = false, message = "Username must be at least 3 characters" });
-    }
 
+    // ולידציה - אורך מינימלי לסיסמה
     if (credentials.password.Length < 6)
-    {
         return Results.Json(new { success = false, message = "Password must be at least 6 characters" });
-    }
 
+    // בדיקה שהמשתמש לא קיים כבר
     var existingUser = await db.Users.FirstOrDefaultAsync(u => u.Username == credentials.username);
     if (existingUser != null)
-    {
         return Results.Json(new { success = false, message = "Username already exists" });
-    }
 
+    // יצירת משתמש חדש ושמירה במסד הנתונים
     var newUser = new User
     {
         Username = credentials.username,
@@ -65,33 +102,44 @@ app.MapPost("/register", async (UserCredentials credentials, WorkoutDbContext db
     return Results.Json(new { success = true, message = "User registered successfully", username = newUser.Username, userId = newUser.Id });
 });
 
+// ============================================================
+// POST /login
+// מאמת פרטי התחברות ומחזיר נתוני המשתמש
+// מקבל: username, password
+// מחזיר: הצלחה/כישלון + userId ו-username
+// ============================================================
 app.MapPost("/login", async (UserCredentials credentials, WorkoutDbContext db) =>
 {
+    // ולידציה - בדיקת שדות ריקים
     if (string.IsNullOrWhiteSpace(credentials.username) || string.IsNullOrWhiteSpace(credentials.password))
-    {
         return Results.Json(new { success = false, message = "Username and password are required" });
-    }
 
+    // חיפוש המשתמש במסד הנתונים לפי שם וסיסמה
     var user = await db.Users.FirstOrDefaultAsync(u =>
         u.Username == credentials.username &&
         u.Password == credentials.password);
 
     if (user == null)
-    {
         return Results.Json(new { success = false, message = "Invalid username or password" });
-    }
 
     Console.WriteLine($"[LOGIN] User logged in: {user.Username} with ID: {user.Id}");
 
     return Results.Json(new { success = true, message = "Login successful", username = user.Username, userId = user.Id });
 });
 
+// ============================================================
+// GET /get-user-workout
+// מחזיר את תוכנית האימון השמורה של המשתמש
+// מקבל: userId (query param)
+// מחזיר: מערך של ימי אימון עם תרגילים
+// ============================================================
 app.MapGet("/get-user-workout", async (int userId, WorkoutDbContext db) =>
 {
     Console.WriteLine($"[GET-WORKOUT] Request for userId: {userId}");
 
     try
     {
+        // שליפת כל ימי האימון של המשתמש ממוינים לפי מספר היום
         var workoutPlans = await db.WorkoutPlans
             .Include(wp => wp.Exercises)
             .Where(wp => wp.UserId == userId)
@@ -104,6 +152,7 @@ app.MapGet("/get-user-workout", async (int userId, WorkoutDbContext db) =>
             return Results.Json(new List<object>());
         }
 
+        // המרת נתוני מסד הנתונים למבנה JSON שהאפליקציה מצפה לו
         var workouts = workoutPlans.Select(wp => new
         {
             name = wp.Name,
@@ -128,12 +177,19 @@ app.MapGet("/get-user-workout", async (int userId, WorkoutDbContext db) =>
     }
 });
 
-app.MapGet("/workouts", async (int userId, int age, string gender, string history, string goal, string location, int weight, int height, int amount, WorkoutDbContext db) =>
+// ============================================================
+// GET /workouts
+// יוצר תוכנית אימון מותאמת אישית באמצעות Gemini AI ושומר אותה
+// מקבל: userId, age, history, goal, location, weight, height, amount
+// מחזיר: מערך JSON של ימי אימון
+// ============================================================
+app.MapGet("/workouts", async (int userId, int age, string history, string goal, string location, int weight, int height, int amount, WorkoutDbContext db) =>
 {
-    Console.WriteLine($"[WORKOUTS] Request received - UserId: {userId}, Age: {age}, Gender: {gender}, Goal: {goal}");
+    Console.WriteLine($"[WORKOUTS] Request received - UserId: {userId}, Age: {age}, Goal: {goal}");
 
     var client = new Client(apiKey: apiKey);
 
+    // בניית הפרומפט ל-Gemini עם פרטי המשתמש
     var contents = $@"i have the following json structure:
 {{
     ""name"": ""workout day name"",
@@ -149,7 +205,6 @@ app.MapGet("/workouts", async (int userId, int age, string gender, string histor
 }}
 
 build me a workout for someone with these stats:
-gender: {gender}
 height: {height}cm, weight: {weight}kg, age: {age}
 goal: {goal}
 workout history: {history} 
@@ -162,20 +217,21 @@ Each workout MUST have a 'name' field (like 'Push Day', 'Pull Day', etc.) and an
 CRITICAL: For videoLink - put ONLY the exercise name as plain text. DO NOT include any URLs or links.
 Example: ""videoLink"": ""bench press"" NOT ""videoLink"": ""https://...""
 
-Take into account the person's gender when selecting exercises and intensity levels.
-
 DO NOT RETURN ANY OTHER TEXT EXCEPT THE JSON ARRAY.";
 
     try
     {
         Console.WriteLine("[WORKOUTS] Sending request to Gemini...");
 
+        // שליחת בקשה ל-Gemini AI לקבלת תוכנית האימון
         var response = await client.Models.GenerateContentAsync(
             model: "gemini-2.5-flash",
             contents: contents
         );
 
         var resultText = response.Candidates[0].Content.Parts[0].Text;
+
+        // ניקוי ה-JSON ממאפייני markdown שמחזיר לפעמים Gemini (```json, ```)
         var cleanJson = CleanJsonString(resultText);
 
         Console.WriteLine($"[WORKOUTS] Received response from Gemini: {cleanJson.Substring(0, Math.Min(200, cleanJson.Length))}...");
@@ -186,12 +242,14 @@ DO NOT RETURN ANY OTHER TEXT EXCEPT THE JSON ARRAY.";
         {
             Console.WriteLine($"[WORKOUTS] Parsed {workoutsData.Count} workouts. Saving to database...");
 
+            // מחיקת תוכנית האימון הישנה של המשתמש לפני שמירת החדשה
             var oldPlans = db.WorkoutPlans.Where(wp => wp.UserId == userId);
             var oldExercises = db.Exercises.Where(e => oldPlans.Select(wp => wp.Id).Contains(e.WorkoutPlanId));
             db.Exercises.RemoveRange(oldExercises);
             db.WorkoutPlans.RemoveRange(oldPlans);
             await db.SaveChangesAsync();
 
+            // שמירת כל ימי האימון והתרגילים במסד הנתונים
             for (int i = 0; i < workoutsData.Count; i++)
             {
                 var workoutPlan = new WorkoutPlan
@@ -211,7 +269,7 @@ DO NOT RETURN ANY OTHER TEXT EXCEPT THE JSON ARRAY.";
                     for (int j = 0; j < workoutsData[i].excercises.Count; j++)
                     {
                         var ex = workoutsData[i].excercises[j];
-                        var exercise = new Exercise
+                        db.Exercises.Add(new Exercise
                         {
                             WorkoutPlanId = workoutPlan.Id,
                             Name = ex.name ?? "Unknown Exercise",
@@ -220,8 +278,7 @@ DO NOT RETURN ANY OTHER TEXT EXCEPT THE JSON ARRAY.";
                             RestTime = ex.restTime,
                             VideoLink = ex.videoLink ?? ex.name ?? "",
                             OrderIndex = j
-                        };
-                        db.Exercises.Add(exercise);
+                        });
                     }
                 }
             }
@@ -244,12 +301,19 @@ DO NOT RETURN ANY OTHER TEXT EXCEPT THE JSON ARRAY.";
     }
 });
 
+// ============================================================
+// GET /replace-exercise
+// מוצא תרגיל חלופי לתרגיל קיים באמצעות Gemini AI
+// מקבל: exerciseName (query param)
+// מחזיר: אובייקט JSON של תרגיל חדש
+// ============================================================
 app.MapGet("/replace-exercise", async (string exerciseName) =>
 {
     Console.WriteLine($"[REPLACE] Request to replace exercise: {exerciseName}");
 
     var client = new Client(apiKey: apiKey);
 
+    // בקשה ל-Gemini למצוא תרגיל חלופי
     var contents = $@"Find an alternative exercise for: {exerciseName}
 
 Return ONLY a JSON object in this exact format (no other text):
@@ -274,6 +338,8 @@ DO NOT return any text except the JSON object.";
         );
 
         var resultText = response.Candidates[0].Content.Parts[0].Text;
+
+        // ניקוי ה-JSON ממאפייני markdown
         var cleanJson = CleanJsonString(resultText);
 
         Console.WriteLine($"[REPLACE] Alternative exercise found: {cleanJson}");
@@ -287,10 +353,12 @@ DO NOT return any text except the JSON object.";
     }
 });
 
-
-
 app.Run();
 
+// ============================================================
+// מנקה את תגובת Gemini ממאפייני markdown (```json, ```)
+// Gemini לפעמים עוטף את ה-JSON בבלוקים של קוד
+// ============================================================
 string CleanJsonString(string input)
 {
     if (string.IsNullOrWhiteSpace(input))
@@ -302,8 +370,11 @@ string CleanJsonString(string input)
         .Trim();
 }
 
-// ============== DATABASE MODELS ==============
+// ============================================================
+// מודלי מסד הנתונים
+// ============================================================
 
+// הקשר למסד הנתונים - מגדיר את הטבלאות והקשרים ביניהן
 public class WorkoutDbContext : DbContext
 {
     public DbSet<User> Users { get; set; }
@@ -311,22 +382,24 @@ public class WorkoutDbContext : DbContext
     public DbSet<Exercise> Exercises { get; set; }
     public DbSet<WorkoutProgress> WorkoutProgress { get; set; }
 
-    public WorkoutDbContext(DbContextOptions<WorkoutDbContext> options) : base(options)
-    {
-    }
+    public WorkoutDbContext(DbContextOptions<WorkoutDbContext> options) : base(options) { }
 
+    // הגדרת קשרים בין הטבלאות
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // משתמש → תוכניות אימון (one-to-many)
         modelBuilder.Entity<WorkoutPlan>()
             .HasOne(wp => wp.User)
             .WithMany(u => u.WorkoutPlans)
             .HasForeignKey(wp => wp.UserId);
 
+        // תוכנית אימון → תרגילים (one-to-many)
         modelBuilder.Entity<Exercise>()
             .HasOne(e => e.WorkoutPlan)
             .WithMany(wp => wp.Exercises)
             .HasForeignKey(e => e.WorkoutPlanId);
 
+        // משתמש → היסטוריית אימונים (one-to-many)
         modelBuilder.Entity<WorkoutProgress>()
             .HasOne(wp => wp.User)
             .WithMany(u => u.Progress)
@@ -334,6 +407,7 @@ public class WorkoutDbContext : DbContext
     }
 }
 
+// טבלת משתמשים
 public class User
 {
     [Key]
@@ -343,7 +417,7 @@ public class User
     public string Username { get; set; }
 
     [Required]
-    public string Password { get; set; }
+    public string Password { get; set; }            // הערה: בפרודקשן יש להצפין את הסיסמה!
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
@@ -351,6 +425,7 @@ public class User
     public List<WorkoutProgress> Progress { get; set; } = new();
 }
 
+// טבלת תוכניות אימון - כל שורה היא יום אימון אחד
 public class WorkoutPlan
 {
     [Key]
@@ -360,9 +435,9 @@ public class WorkoutPlan
     public int UserId { get; set; }
 
     [Required]
-    public string Name { get; set; }
+    public string Name { get; set; }                // שם יום האימון (למשל: "Push Day")
 
-    public int DayNumber { get; set; }
+    public int DayNumber { get; set; }              // מספר היום בתוכנית (1, 2, 3...)
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
@@ -370,6 +445,7 @@ public class WorkoutPlan
     public List<Exercise> Exercises { get; set; } = new();
 }
 
+// טבלת תרגילים - כל שורה היא תרגיל בודד ביום אימון
 public class Exercise
 {
     [Key]
@@ -382,18 +458,15 @@ public class Exercise
     public string Name { get; set; }
 
     public int Sets { get; set; }
-
     public int Reps { get; set; }
-
-    public int RestTime { get; set; }
-
-    public string VideoLink { get; set; }
-
-    public int OrderIndex { get; set; }
+    public int RestTime { get; set; }               // זמן מנוחה בשניות
+    public string VideoLink { get; set; }           // שם התרגיל לחיפוש סרטון
+    public int OrderIndex { get; set; }             // סדר הופעת התרגיל ביום
 
     public WorkoutPlan WorkoutPlan { get; set; }
 }
 
+// טבלת היסטוריית אימונים - שמירת ביצועים לאורך זמן
 public class WorkoutProgress
 {
     [Key]
@@ -406,28 +479,29 @@ public class WorkoutProgress
     public string ExerciseName { get; set; }
 
     public int Sets { get; set; }
-
     public int Reps { get; set; }
-
-    public double Weight { get; set; }
-
+    public double Weight { get; set; }              // משקל בק"ג
     public string Notes { get; set; }
-
     public DateTime CompletedAt { get; set; }
 
     public User User { get; set; }
 }
 
-// ============== DTOs ==============
+// ============================================================
+// DTOs - אובייקטי העברת נתונים
+// ============================================================
 
+// DTO לקבלת פרטי התחברות/הרשמה
 public record UserCredentials(string username, string password);
 
+// DTO לפענוח תגובת Gemini - יום אימון
 public class WorkoutData
 {
     public string name { get; set; }
     public List<ExerciseData> excercises { get; set; }
 }
 
+// DTO לפענוח תגובת Gemini - תרגיל בודד
 public class ExerciseData
 {
     public string name { get; set; }
@@ -437,6 +511,7 @@ public class ExerciseData
     public string videoLink { get; set; }
 }
 
+// DTO לשמירת התקדמות אימון (לשימוש עתידי)
 public class WorkoutProgressDto
 {
     public int userId { get; set; }
@@ -446,6 +521,36 @@ public class WorkoutProgressDto
     public double weight { get; set; }
     public string notes { get; set; }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
