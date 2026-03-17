@@ -41,7 +41,7 @@ using (var scope = app.Services.CreateScope())
     try
     {
         Console.WriteLine("[DB] Running migrations...");
-        db.Database.Migrate();
+        db.Database.EnsureDeleted();
         Console.WriteLine("[DB] Database ready!");
     }
     catch (Exception ex)
