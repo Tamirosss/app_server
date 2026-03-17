@@ -24,7 +24,8 @@ if (!string.IsNullOrEmpty(databaseUrl))
 }
 else
 {
-    // פיתוח - SQLite מקומי
+    // פיתוח - SQLite מקומי 
+    System.Console.WriteLine("RUNNIGN THE DEV VERSION!!!!");
     Console.WriteLine("[DB] Using SQLite for local development");
     builder.Services.AddDbContext<WorkoutDbContext>(options =>
         options.UseSqlite("Data Source=workout.db"));
