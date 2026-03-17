@@ -51,9 +51,9 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "dependencies": {
-            "Google.GenerativeAI": {
+            "Google.GenAI": {
               "target": "Package",
-              "version": "[1.0.0, )"
+              "version": "[1.4.0, )"
             },
             "Microsoft.EntityFrameworkCore": {
               "target": "Package",
