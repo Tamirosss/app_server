@@ -36,7 +36,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<WorkoutDbContext>();
-    
+
     try
     {
         Console.WriteLine("[DB] Running migrations...");
@@ -55,8 +55,8 @@ using (var scope = app.Services.CreateScope())
 app.UseCors(policy =>
 {
     policy.AllowAnyOrigin()
-          .AllowAnyMethod()
-          .AllowAnyHeader();
+        .AllowAnyMethod()
+        .AllowAnyHeader();
 });
 
 // מפתח ה-API של Gemini AI

@@ -37,7 +37,7 @@ EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
 
 # פקודת הרצה
-ENTRYPOINT ["dotnet", "YourProjectName.dll"]
+ENTRYPOINT ["dotnet", "JsonDemo.dll"]
 
 
 
