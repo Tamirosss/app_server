@@ -48,8 +48,6 @@ using (var scope = app.Services.CreateScope())
     try
     {
         Console.WriteLine("[DB] Ensuring database exists...");
-        db.Database.EnsureDeleted();   // drops DB schema (tables)
-
         var created = db.Database.EnsureCreated();
         Console.WriteLine($"[DB] EnsureCreated result: {created}");
     }
