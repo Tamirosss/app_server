@@ -5,27 +5,32 @@ using System.ComponentModel.DataAnnotations;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// הוספת שירותים - CORS ומסד נתונים
+// ============================================================
+// Services - CORS and DbContext
+// ============================================================
 builder.Services.AddCors();
 
 // ============================================================
-// קריאת מחרוזת החיבור למסד הנתונים
-// אם יש DATABASE_URL (Coolify) - נשתמש בו
-// אחרת נשתמש ב-SQLite לפיתוח מקומי
+// Database connection - PostgreSQL in production, SQLite in dev
 // ============================================================
 var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
 
 if (!string.IsNullOrEmpty(databaseUrl))
 {
-    // פרודקשן - PostgreSQL
     Console.WriteLine("[DB] Using PostgreSQL from DATABASE_URL");
+
+    // Parse DATABASE_URL (postgres://username:password@host:port/dbname) into Npgsql format
+    var uri = new Uri(databaseUrl);
+    var userInfo = uri.UserInfo.Split(':');
+    var connectionString =
+        $"Host={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};Pooling=true;";
+
     builder.Services.AddDbContext<WorkoutDbContext>(options =>
-        options.UseNpgsql(databaseUrl));
+        options.UseNpgsql(connectionString));
 }
 else
 {
-    // פיתוח - SQLite מקומי 
-    System.Console.WriteLine("RUNNIGN THE DEV VERSION!!!!");
+    // Development - SQLite
     Console.WriteLine("[DB] Using SQLite for local development");
     builder.Services.AddDbContext<WorkoutDbContext>(options =>
         options.UseSqlite("Data Source=workout.db"));
@@ -33,26 +38,29 @@ else
 
 var app = builder.Build();
 
-// יצירת מסד הנתונים והטבלאות אוטומטית אם לא קיימים
+// ============================================================
+// Database initialization - ensure tables exist
+// ============================================================
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<WorkoutDbContext>();
 
     try
     {
-        Console.WriteLine("[DB] Running migrations...");
-        db.Database.EnsureDeleted();
-        Console.WriteLine("[DB] Database ready!");
+        Console.WriteLine("[DB] Ensuring database exists...");
+        var created = db.Database.EnsureCreated();
+        Console.WriteLine($"[DB] EnsureCreated result: {created}");
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"[DB] Migration error: {ex.Message}");
-        // אם Migrate נכשל, ננסה EnsureCreated
-        db.Database.EnsureCreated();
+        Console.WriteLine($"[DB] ERROR while creating DB: {ex}");
+        throw;
     }
 }
 
-// הגדרת CORS - מאפשר בקשות מכל מקור
+// ============================================================
+// CORS policy - allow all origins, methods, headers
+// ============================================================
 app.UseCors(policy =>
 {
     policy.AllowAnyOrigin()
@@ -60,8 +68,10 @@ app.UseCors(policy =>
         .AllowAnyHeader();
 });
 
-// מפתח ה-API של Gemini AI
-var apiKey = "GEMINI_API_KEY";
+// ============================================================
+// Gemini AI API key
+// ============================================================
+var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? "GEMINI_API_KEY";
 
 // ============================================================
 // POST /register
