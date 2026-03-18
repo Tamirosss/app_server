@@ -401,7 +401,22 @@ public class WorkoutDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // Configure relationships
+        // Auto-increment IDs for PostgreSQL
+        modelBuilder.Entity<User>()
+            .Property(u => u.Id)
+            .ValueGeneratedOnAdd();
+
+        modelBuilder.Entity<WorkoutPlan>()
+            .Property(wp => wp.Id)
+            .ValueGeneratedOnAdd();
+
+        modelBuilder.Entity<Exercise>()
+            .Property(e => e.Id)
+            .ValueGeneratedOnAdd();
+
+        modelBuilder.Entity<WorkoutProgress>()
+            .Property(wp => wp.Id)
+            .ValueGeneratedOnAdd();
 
         // User → WorkoutPlans (one-to-many)
         modelBuilder.Entity<WorkoutPlan>()
