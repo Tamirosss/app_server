@@ -3,6 +3,7 @@ using Google.GenAI;
 using System.Text.Json;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using System.ComponentModel.DataAnnotations.Schema;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -52,7 +53,6 @@ using (var scope = app.Services.CreateScope())
     {
         Console.WriteLine("[DB] Ensuring database exists...");
         db.Database.Migrate();
-        db.Database.EnsureCreated();
         //Console.WriteLine($"[DB] EnsureCreated result: true");
     }
     catch (Exception ex)
@@ -399,22 +399,23 @@ public class WorkoutDbContext : DbContext
 
     public WorkoutDbContext(DbContextOptions<WorkoutDbContext> options) : base(options) { }
 
-    // הגדרת קשרים בין הטבלאות
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // משתמש → תוכניות אימון (one-to-many)
+        // Configure relationships
+
+        // User → WorkoutPlans (one-to-many)
         modelBuilder.Entity<WorkoutPlan>()
             .HasOne(wp => wp.User)
             .WithMany(u => u.WorkoutPlans)
             .HasForeignKey(wp => wp.UserId);
 
-        // תוכנית אימון → תרגילים (one-to-many)
+        // WorkoutPlan → Exercises (one-to-many)
         modelBuilder.Entity<Exercise>()
             .HasOne(e => e.WorkoutPlan)
             .WithMany(wp => wp.Exercises)
             .HasForeignKey(e => e.WorkoutPlanId);
 
-        // משתמש → היסטוריית אימונים (one-to-many)
+        // User → WorkoutProgress (one-to-many)
         modelBuilder.Entity<WorkoutProgress>()
             .HasOne(wp => wp.User)
             .WithMany(u => u.Progress)
@@ -422,17 +423,22 @@ public class WorkoutDbContext : DbContext
     }
 }
 
-// טבלת משתמשים
+// ============================================================
+// Entities
+// ============================================================
+
+// User
 public class User
 {
     [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
 
     [Required]
     public string Username { get; set; }
 
     [Required]
-    public string Password { get; set; }            // הערה: בפרודקשן יש להצפין את הסיסמה!
+    public string Password { get; set; }  // NOTE: Hash in production!
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
@@ -440,19 +446,20 @@ public class User
     public List<WorkoutProgress> Progress { get; set; } = new();
 }
 
-// טבלת תוכניות אימון - כל שורה היא יום אימון אחד
+// WorkoutPlan
 public class WorkoutPlan
 {
     [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
 
     [Required]
     public int UserId { get; set; }
 
     [Required]
-    public string Name { get; set; }                // שם יום האימון (למשל: "Push Day")
+    public string Name { get; set; } // e.g., "Push Day"
 
-    public int DayNumber { get; set; }              // מספר היום בתוכנית (1, 2, 3...)
+    public int DayNumber { get; set; } // day in program
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
@@ -460,10 +467,11 @@ public class WorkoutPlan
     public List<Exercise> Exercises { get; set; } = new();
 }
 
-// טבלת תרגילים - כל שורה היא תרגיל בודד ביום אימון
+// Exercise
 public class Exercise
 {
     [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
 
     [Required]
@@ -474,17 +482,18 @@ public class Exercise
 
     public int Sets { get; set; }
     public int Reps { get; set; }
-    public int RestTime { get; set; }               // זמן מנוחה בשניות
-    public string VideoLink { get; set; }           // שם התרגיל לחיפוש סרטון
-    public int OrderIndex { get; set; }             // סדר הופעת התרגיל ביום
+    public int RestTime { get; set; } // seconds
+    public string VideoLink { get; set; }
+    public int OrderIndex { get; set; }
 
     public WorkoutPlan WorkoutPlan { get; set; }
 }
 
-// טבלת היסטוריית אימונים - שמירת ביצועים לאורך זמן
+// WorkoutProgress
 public class WorkoutProgress
 {
     [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
 
     [Required]
@@ -495,7 +504,7 @@ public class WorkoutProgress
 
     public int Sets { get; set; }
     public int Reps { get; set; }
-    public double Weight { get; set; }              // משקל בק"ג
+    public double Weight { get; set; } // kg
     public string Notes { get; set; }
     public DateTime CompletedAt { get; set; }
 
@@ -503,20 +512,17 @@ public class WorkoutProgress
 }
 
 // ============================================================
-// DTOs - אובייקטי העברת נתונים
+// DTOs
 // ============================================================
 
-// DTO לקבלת פרטי התחברות/הרשמה
 public record UserCredentials(string username, string password);
 
-// DTO לפענוח תגובת Gemini - יום אימון
 public class WorkoutData
 {
     public string name { get; set; }
     public List<ExerciseData> excercises { get; set; }
 }
 
-// DTO לפענוח תגובת Gemini - תרגיל בודד
 public class ExerciseData
 {
     public string name { get; set; }
@@ -526,7 +532,6 @@ public class ExerciseData
     public string videoLink { get; set; }
 }
 
-// DTO לשמירת התקדמות אימון (לשימוש עתידי)
 public class WorkoutProgressDto
 {
     public int userId { get; set; }
@@ -536,43 +541,3 @@ public class WorkoutProgressDto
     public double weight { get; set; }
     public string notes { get; set; }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
