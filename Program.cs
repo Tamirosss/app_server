@@ -52,6 +52,7 @@ using (var scope = app.Services.CreateScope())
     try
     {
         Console.WriteLine("[DB] Ensuring database exists...");
+        db.Database.EnsureDeleted();
         db.Database.Migrate();
         Console.WriteLine($"[DB] EnsureCreated result: true");
     }
