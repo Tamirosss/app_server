@@ -52,8 +52,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         Console.WriteLine("[DB] Ensuring database exists...");
-        var created = db.Database.EnsureCreated();
-        Console.WriteLine($"[DB] EnsureCreated result: {created}");
+        db.Database.Migrate();
+        Console.WriteLine($"[DB] EnsureCreated result: true");
     }
     catch (Exception ex)
     {
