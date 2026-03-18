@@ -29,7 +29,6 @@ if (!string.IsNullOrEmpty(databaseUrl))
     builder.Services.AddDbContext<WorkoutDbContext>(options =>
     {
         options.UseNpgsql(connectionString);
-        options.ConfigureWarnings(w => w.Ignore());
     });
 }
 else
