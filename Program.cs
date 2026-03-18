@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Google.GenAI;
 using System.Text.Json;
 using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,7 +27,9 @@ if (!string.IsNullOrEmpty(databaseUrl))
         $"Host={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};Pooling=true;";
 
     builder.Services.AddDbContext<WorkoutDbContext>(options =>
-        options.UseNpgsql(connectionString));
+    {
+        options.UseNpgsql(connectionString);
+    });
 }
 else
 {
